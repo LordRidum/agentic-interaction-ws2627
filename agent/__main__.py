@@ -1,14 +1,15 @@
-import os, json, requests, time, uuid
+import os, json, requests, time, uuid, sys
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from groq import Groq
+from pathlib import Path
 
 load_dotenv()
 
 client = Groq(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("MODEL")
 DATABASE = os.getenv("DATA_BASE_URL")
-LOG_FILE = "agent_log.jsonl"
+LOG_FILE = "agent_log.json"
 
 
 # ==============================
@@ -29,6 +30,10 @@ def log(run_id, event, ok=True, tool_name=None, tool_args=None, duration_ms=None
     }
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+def clear_log():
+    if os.path.exists(LOG_FILE):
+        Path(LOG_FILE).write_text("")
 
 
 def ms_since(start):
@@ -51,7 +56,7 @@ tools = [{
     "type": "function",
     "function": {
         "name": "read_data",
-        "description": "reads data from a source",
+        "description": "Reads data from the API. Call with an empty path first to get the index of available paths.",
         "parameters": {
             "type": "object",
             "properties": {"path": {"type": "string"}},
@@ -71,11 +76,7 @@ messages = [{
 #  CHAT LOOP
 # ==============================
 
-while True:
-    user_input = input("User: ")
-    if user_input.lower() == "exit":
-        break
-
+def ask(user_input):
     run_id = str(uuid.uuid4())                  # each question gets its own run_id
     log(run_id, "user_task", detail=user_input)
     messages.append({"role": "user", "content": user_input})
@@ -97,7 +98,7 @@ while True:
             "content": msg.content,
             "tool_calls": [
                 {"id": c.id, "type": "function",
-                 "function": {"name": c.function.name, "arguments": c.function.arguments}}
+                    "function": {"name": c.function.name, "arguments": c.function.arguments}}
                 for c in msg.tool_calls
             ],
         })
@@ -115,4 +116,26 @@ while True:
             messages.append({"role": "tool", "tool_call_id": c.id, "content": result})
 
     messages.append({"role": "assistant", "content": msg.content})
-    print(f"AI: {msg.content}\n")
+    return msg.content
+
+def chat():
+    while True:
+        user_input = input("User: ")
+
+        if user_input.lower() == "exit":
+            print("Exiting chat.")
+            break
+
+        if user_input.lower() == "clear":
+            clear_log()
+            del messages[1:]      # Gesprächsverlauf zurücksetzen, System-Prompt bleibt
+            print("Log cleared.\n")
+            continue              # zurück zum Anfang der Schleife, ask() wird übersprungen
+
+        print(f"AI: {ask(user_input)}\n")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        print(ask(" ".join(sys.argv[1:])))   # One-Shot: Antwort ausgeben, Programm endet
+    else:
+        chat()                                # kein Argument: wie bisher

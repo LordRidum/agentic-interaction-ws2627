@@ -2,7 +2,17 @@
 
 Run in the project folder:
 
-    python -m agent
+```bash
+python -m agent "question"
+```
 
-This opens the chat. Type in your question and press Enter.
-Type `exit` to quit.
+This returns the answer and exits.
+
+```bash
+python -m agent
+```
+
+This opens the chat. Type your question and press Enter.
+
+- Type `exit` to quit.
+- Type `clear` to clear the logs and reset the conversation.
