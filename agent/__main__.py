@@ -1,68 +1,16 @@
-import os, json, requests, time, uuid, sys
-from datetime import datetime, timezone
+import os, json, time, uuid, sys
+from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
-from pathlib import Path
+
+from .logger import log, clear_log, ms_since
+from .tools import read_data, tools
 
 load_dotenv()
 
 client = Groq(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("MODEL")
-DATABASE = os.getenv("DATA_BASE_URL")
-LOG_FILE = "agent_log.json"
 
-
-# ==============================
-#  HELPERS
-# ==============================
-
-def log(run_id, event, ok=True, tool_name=None, tool_args=None, duration_ms=None, detail=None):
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "run_id": run_id,
-        "event": event,
-        "tool_name": tool_name,
-        "tool_args": tool_args,
-        "ok": ok,
-        "model": MODEL,
-        "duration_ms": duration_ms,
-        "detail": detail,
-    }
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-def clear_log():
-    if os.path.exists(LOG_FILE):
-        Path(LOG_FILE).write_text("")
-
-
-def ms_since(start):
-    return round((time.perf_counter() - start) * 1000)
-
-
-def read_data(path=""):
-    url = f"{DATABASE}/{path.lstrip('/')}" if path else DATABASE
-    r = requests.get(url, timeout=10)
-    if not r.ok:
-        return False, f"Error: HTTP {r.status_code}"
-    return True, r.text[:20000]
-
-
-# ==============================
-#  MODEL CONFIG
-# ==============================
-
-tools = [{
-    "type": "function",
-    "function": {
-        "name": "read_data",
-        "description": "Reads data from the API. Call with an empty path first to get the index of available paths.",
-        "parameters": {
-            "type": "object",
-            "properties": {"path": {"type": "string"}},
-        },
-    },
-}]
 
 messages = [{
     "role": "system",
@@ -73,7 +21,7 @@ messages = [{
 
 
 # ==============================
-#  CHAT LOOP
+#  AGENT
 # ==============================
 
 def ask(user_input):
@@ -128,14 +76,14 @@ def chat():
 
         if user_input.lower() == "clear":
             clear_log()
-            del messages[1:]      # Gesprächsverlauf zurücksetzen, System-Prompt bleibt
+            del messages[1:]
             print("Log cleared.\n")
-            continue              # zurück zum Anfang der Schleife, ask() wird übersprungen
+            continue              # skip to next iteration
 
         print(f"AI: {ask(user_input)}\n")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print(ask(" ".join(sys.argv[1:])))   # One-Shot: Antwort ausgeben, Programm endet
+        print(ask(" ".join(sys.argv[1:])))   # One-Shot-Answer
     else:
-        chat()                                # kein Argument: wie bisher
+        chat()                               
