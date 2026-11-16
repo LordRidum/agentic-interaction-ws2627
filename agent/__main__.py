@@ -68,16 +68,16 @@ def ask(user_input):
             try:
                 args = json.loads(args or "{}")
                 # tool_call: duration = model time to produce the call
-                log(run_id, "tool_call", tool=c.function.name, args=args, duration_ms=model_ms)
+                log(run_id, "tool_call", tool_name=c.function.name, tool_args=args, duration_ms=model_ms)
 
                 t = time.perf_counter()
                 ok, result = read_data(args.get("path", ""))
                 # tool_result: duration = tool execution time
-                log(run_id, "tool_result", ok=ok, tool=c.function.name, args=args,
+                log(run_id, "tool_result", ok=ok, tool_name=c.function.name, tool_args=args,
                     duration_ms=ms_since(t), detail=None if ok else result)
             except Exception as e:              # invalid JSON, network error ...
                 result = f"Error: {e}"
-                log(run_id, "error", ok=False, tool=c.function.name, args=args,
+                log(run_id, "error", ok=False, tool_name=c.function.name, tool_args=args,
                     duration_ms=ms_since(t), detail=str(e))
 
             # always answer the tool call, so the model can react to errors
