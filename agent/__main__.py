@@ -10,13 +10,14 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("MODEL")
+MAX_STEPS = 10      # max model calls per question, prevents endless tool loops
 
 
 messages = [{
     "role": "system",
     "content": f"Today is {datetime.now().strftime('%Y-%m-%d')}. "
                "Answer Questions only based on tool data, do not make things up. "
-               "Dont guess paths, use the paths from index"
+               "Dont guess paths, start by reading the index and only use paths from its endpoints."
 }]
 
 
@@ -29,7 +30,7 @@ def ask(user_input):
     log(run_id, "user_task", detail=user_input)
     messages.append({"role": "user", "content": user_input})
 
-    while True:
+    for _ in range(MAX_STEPS):
         start = time.perf_counter()
         response = client.chat.completions.create(
             model=MODEL, messages=messages, tools=tools
@@ -39,7 +40,8 @@ def ask(user_input):
 
         if not msg.tool_calls:                  # no tool requested --> final answer
             log(run_id, "final", duration_ms=model_ms, detail=msg.content)
-            break
+            messages.append({"role": "assistant", "content": msg.content})
+            return msg.content
 
         messages.append({
             "role": "assistant",
@@ -63,8 +65,11 @@ def ask(user_input):
 
             messages.append({"role": "tool", "tool_call_id": c.id, "content": result})
 
-    messages.append({"role": "assistant", "content": msg.content})
-    return msg.content
+    # step limit reached without a final answer
+    answer = f"Stopped: no final answer after {MAX_STEPS} steps."
+    log(run_id, "final", ok=False, detail=answer)
+    messages.append({"role": "assistant", "content": answer})
+    return answer
 
 def chat():
     while True:
