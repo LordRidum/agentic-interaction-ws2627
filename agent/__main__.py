@@ -17,6 +17,8 @@ messages = [{
     "role": "system",
     "content": f"Today is {datetime.now().strftime('%Y-%m-%d')}. "
                "Answer Questions only based on tool data, do not make things up. "
+               "Your answer must be based exclusively on the retrieved data: no general knowledge, "
+               "tips, advice or assumptions (e.g. station names, transfer points, booking hints). "
                "Dont guess paths, start by reading the index and only use paths from its endpoints."
 }]
 
@@ -32,9 +34,15 @@ def ask(user_input):
 
     for _ in range(MAX_STEPS):
         start = time.perf_counter()
-        response = client.chat.completions.create(
-            model=MODEL, messages=messages, tools=tools
-        )
+        try:
+            response = client.chat.completions.create(
+                model=MODEL, messages=messages, tools=tools
+            )
+        except Exception as e:                  # API error, rate limit, invalid tool call ...
+            answer = f"Error: model request failed ({e})"
+            log(run_id, "error", ok=False, duration_ms=ms_since(start), detail=str(e))
+            messages.append({"role": "assistant", "content": answer})
+            return answer
         model_ms = ms_since(start)
         msg = response.choices[0].message
 
@@ -55,19 +63,29 @@ def ask(user_input):
 
         # run each requested tool and hand the result back
         for c in msg.tool_calls:
-            args = json.loads(c.function.arguments or "{}")
-            log(run_id, "tool_call", tool_name=c.function.name, tool_args=args, duration_ms=model_ms)
-
             t = time.perf_counter()
-            ok, result = read_data(args.get("path", ""))
-            log(run_id, "tool_result", ok=ok, tool_name=c.function.name, tool_args=args,
-                duration_ms=ms_since(t), detail=None if ok else result)
+            args = c.function.arguments                # raw string, in case parsing fails
+            try:
+                args = json.loads(args or "{}")
+                # tool_call: duration = model time to produce the call
+                log(run_id, "tool_call", tool=c.function.name, args=args, duration_ms=model_ms)
 
+                t = time.perf_counter()
+                ok, result = read_data(args.get("path", ""))
+                # tool_result: duration = tool execution time
+                log(run_id, "tool_result", ok=ok, tool=c.function.name, args=args,
+                    duration_ms=ms_since(t), detail=None if ok else result)
+            except Exception as e:              # invalid JSON, network error ...
+                result = f"Error: {e}"
+                log(run_id, "error", ok=False, tool=c.function.name, args=args,
+                    duration_ms=ms_since(t), detail=str(e))
+
+            # always answer the tool call, so the model can react to errors
             messages.append({"role": "tool", "tool_call_id": c.id, "content": result})
 
     # step limit reached without a final answer
     answer = f"Stopped: no final answer after {MAX_STEPS} steps."
-    log(run_id, "final", ok=False, detail=answer)
+    log(run_id, "error", ok=False, detail=answer)
     messages.append({"role": "assistant", "content": answer})
     return answer
 
@@ -85,10 +103,10 @@ def chat():
             print("Log cleared.\n")
             continue              # skip to next iteration
 
-        print(f"AI: {ask(user_input)}\n")
+        print(f"\nAI: {ask(user_input)}\n")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print(ask(" ".join(sys.argv[1:])))   # One-Shot-Answer
+        print(f"\n{ask(' '.join(sys.argv[1:]))}\n")   # One-Shot-Answer
     else:
         chat()                               
