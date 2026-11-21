@@ -1,16 +1,16 @@
 import os, json, time, uuid, sys
 from datetime import datetime
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 
 from .logger import log, clear_log, ms_since
 from .tools import read_data, tools
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
 MODEL = os.getenv("MODEL")
-MAX_STEPS = 10      # max model calls per question, prevents endless tool loops
+MAX_STEPS = 10
 
 
 messages = [{
