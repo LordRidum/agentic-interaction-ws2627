@@ -10,7 +10,7 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
 MODEL = os.getenv("MODEL")
-MAX_STEPS = 10
+MAX_STEPS = 2
 
 
 messages = [{
@@ -84,10 +84,10 @@ def ask(user_input):
             messages.append({"role": "tool", "tool_call_id": c.id, "content": result})
 
     # step limit reached without a final answer
-    answer = f"Stopped: no final answer after {MAX_STEPS} steps."
-    log(run_id, "error", ok=False, detail=answer)
-    messages.append({"role": "assistant", "content": answer})
-    return answer
+    error = f"StepLimitError: Step limit reached after {MAX_STEPS} model calls."
+    log(run_id, "error", ok=False, detail=error)
+    messages.append({"role": "assistant", "content": error})
+    raise RuntimeError(error)
 
 def chat():
     while True:
@@ -103,10 +103,17 @@ def chat():
             print("Log cleared.\n")
             continue              # skip to next iteration
 
-        print(f"\nAI: {ask(user_input)}\n")
+        try:
+            print(f"\nAI: {ask(user_input)}\n")
+        except RuntimeError as e:
+            print(f"\n{e}\n")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print(f"\n{ask(' '.join(sys.argv[1:]))}\n")   # One-Shot-Answer
+        try:
+            print(f"\n{ask(' '.join(sys.argv[1:]))}\n")   # One-Shot-Answer
+        except RuntimeError as e:
+            print(f"\n{e}\n", file=sys.stderr)
+            sys.exit(1)
     else:
         chat()                               
