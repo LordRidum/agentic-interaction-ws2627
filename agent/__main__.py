@@ -4,13 +4,13 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from .logger import log, clear_log, ms_since
-from .tools import read_data, tools
+from .tools import functions, tools
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
 MODEL = os.getenv("MODEL")
-MAX_STEPS = 2
+MAX_STEPS = 10
 
 
 messages = [{
@@ -71,7 +71,7 @@ def ask(user_input):
                 log(run_id, "tool_call", tool_name=c.function.name, tool_args=args, duration_ms=model_ms)
 
                 t = time.perf_counter()
-                ok, result = read_data(args.get("path", ""))
+                ok, result = functions[c.function.name](**args)
                 # tool_result: duration = tool execution time
                 log(run_id, "tool_result", ok=ok, tool_name=c.function.name, tool_args=args,
                     duration_ms=ms_since(t), detail=None if ok else result)
