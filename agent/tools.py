@@ -5,19 +5,30 @@ load_dotenv()
 
 DATABASE = os.getenv("DATA_BASE_URL")
 
+NO_DATA = ("No data for this place and date (HTTP 404). Only retry if the city was not a key from the index "
+           "(e.g. munich instead of muenchen). Otherwise this is final: do not look for this data elsewhere, "
+           "tell the user that there is no data.")
+NO_PATH = ("No data at this path (HTTP 404). Only paths from the endpoints in the index exist. "
+           "If the path was built from an endpoint, this is final: do not try variations, "
+           "tell the user that there is no data.")
+
+
+def http_error(r, not_found):
+    return not_found if r.status_code == 404 else f"Error: HTTP {r.status_code}"
+
 
 def read_data(path=""):
     url = f"{DATABASE}/{path.lstrip('/')}" if path else DATABASE
     r = requests.get(url, timeout=10)
     if not r.ok:
-        return False, f"Error: HTTP {r.status_code}"
+        return False, http_error(r, NO_PATH)
     return True, r.text[:20000]
 
 
 def get_weather(city, date):
     r = requests.get(f"{DATABASE}/weather/{city}/{date}.json", timeout=10)
     if not r.ok:
-        return False, f"Error: HTTP {r.status_code}"
+        return False, http_error(r, NO_DATA)
     return True, r.text[:20000]
 
 
@@ -29,7 +40,7 @@ def get_train_connections(destination, date, origin=None):
         origin = r.json()["home"].lower()
     r = requests.get(f"{DATABASE}/transit/{origin}/{destination}/{date}.json", timeout=10)
     if not r.ok:
-        return False, f"Error: HTTP {r.status_code}"
+        return False, http_error(r, NO_DATA)
     return True, r.text[:20000]
 
 
